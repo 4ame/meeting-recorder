@@ -1,0 +1,26 @@
+# Sécurité — ne jamais committer
+.env
+
+# Données locales
+recordings/
+output/
+GeneratedCR/
+tray.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Whisper models cache
+~/.cache/whisper/
+
+# Claude Code
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
