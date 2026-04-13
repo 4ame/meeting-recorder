@@ -16,6 +16,17 @@ import sys
 import json
 import os
 
+# Force UTF-8 sur stdout et stderr pour éviter la corruption des accents sur Windows (CP1252)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+
+# Ajoute FFmpeg (Scoop) au PATH avant tout import pour torchcodec et whisperx.load_audio
+_ffmpeg_bin = r"C:\Users\arnau\scoop\apps\ffmpeg\current\bin"
+if os.path.exists(_ffmpeg_bin):
+    os.environ["PATH"] = _ffmpeg_bin + os.pathsep + os.environ.get("PATH", "")
+
 def main():
     # Redirige stdout vers stderr pour que les logs n'interfèrent pas avec le JSON
     _real_stdout = sys.stdout
@@ -53,7 +64,11 @@ def main():
 
     # Étape 3 — Diarisation (optionnelle si token HuggingFace disponible)
     if hf_token:
-        diarize_model = whisperx.DiarizationPipeline(use_auth_token=hf_token, device=device)
+        diarize_model = whisperx.diarize.DiarizationPipeline(
+            model_name="pyannote/speaker-diarization-3.1",
+            token=hf_token,
+            device=device
+        )
         diarize_segments = diarize_model(audio)
         result = whisperx.assign_word_speakers(diarize_segments, result)
 
@@ -86,9 +101,11 @@ def main():
         "transcription": transcription
     }
 
-    # Restaure stdout et écrit uniquement le JSON
+    # Restaure stdout et écrit le JSON en UTF-8 pur dans le buffer binaire
     sys.stdout = _real_stdout
-    print(json.dumps(output, ensure_ascii=False))
+    output_json = json.dumps(output, ensure_ascii=False)
+    sys.stdout.buffer.write(output_json.encode("utf-8") + b"\n")
+    sys.stdout.buffer.flush()
 
 
 if __name__ == "__main__":
