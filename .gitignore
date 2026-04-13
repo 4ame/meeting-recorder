@@ -13,6 +13,7 @@ __pycache__/
 *.pyo
 .venv/
 venv/
+venv-whisperx/
 *.egg-info/
 
 # Whisper models cache
