@@ -20,6 +20,7 @@ load_dotenv()
 
 # --- Configuration ---
 API_KEY = os.getenv("GEMINI_API_KEY")
+API_KEY_COMPANY = os.getenv("GEMINI_API_KEY_COMPANY")
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "small")
 OUTPUT_DIR = os.getenv("OUTPUT_DIR", os.path.expanduser("~/Documents/GeneratedCR/CompteRendus"))
 PROMPT_FILE = Path(__file__).parent.parent / "prompts" / "compte-rendu.md"
@@ -216,18 +217,46 @@ def generate_report_from_text(transcription: str) -> str:
     prompt = load_prompt()
     full_prompt = f"{prompt}\n\n## Transcription de la réunion\n\n{transcription}"
 
-    models_fallback = ["gemini-3.1-pro-preview", "gemini-3-flash-preview", "gemini-2.5-flash"]
-    for model in models_fallback:
+    debug = os.getenv("GEMINI_DEBUG", "0") == "1"
+
+    # Clé perso (tier gratuit) — modèles disponibles sans spending cap
+    # Clé entreprise (tier payant) — modèles premium, fallback si perso insuffisant
+    attempts = []
+    if API_KEY:
+        attempts += [
+            (API_KEY, "gemini-2.5-pro"),
+            (API_KEY, "gemini-3-flash-preview"),
+            (API_KEY, "gemini-2.5-flash"),
+        ]
+    if API_KEY_COMPANY:
+        attempts += [
+            (API_KEY_COMPANY, "gemini-3.1-pro-preview"),
+            (API_KEY_COMPANY, "gemini-3-flash-preview"),
+            (API_KEY_COMPANY, "gemini-2.5-flash"),
+        ]
+
+    for api_key, model in attempts:
+        key_label = "perso" if api_key == API_KEY else "entreprise"
         try:
-            print(f"   Modèle : {model}")
-            response = client.models.generate_content(
+            print(f"   Modèle : {model} [{key_label}]")
+            if debug:
+                print(f"   [DEBUG] Prompt : {len(full_prompt)} caractères")
+                print(f"   [DEBUG] Envoi requête...")
+            c = genai.Client(api_key=api_key)
+            response = c.models.generate_content(
                 model=model,
                 contents=full_prompt
             )
+            if debug:
+                print(f"   [DEBUG] Réponse reçue : {len(response.text)} caractères")
+                print(f"   [DEBUG] Usage tokens : {getattr(response, 'usage_metadata', 'N/A')}")
             print("✅ Compte rendu généré")
             return response.text
         except Exception as e:
-            print(f"   ⚠️  {model} indisponible ({e.__class__.__name__}: {e}), tentative suivante...")
+            print(f"   ⚠️  {model} [{key_label}] indisponible ({e.__class__.__name__}: {e}), tentative suivante...")
+            if debug:
+                import traceback
+                print(f"   [DEBUG] Traceback complet :\n{traceback.format_exc()}")
 
     raise RuntimeError("Tous les modèles Gemini sont indisponibles.")
 
