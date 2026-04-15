@@ -216,7 +216,7 @@ def generate_report_from_text(transcription: str) -> str:
     prompt = load_prompt()
     full_prompt = f"{prompt}\n\n## Transcription de la réunion\n\n{transcription}"
 
-    models_fallback = ["gemini-3.1-pro-preview", "gemini-3-flash-preview"]
+    models_fallback = ["gemini-3.1-pro-preview", "gemini-3-flash-preview", "gemini-2.5-flash"]
     for model in models_fallback:
         try:
             print(f"   Modèle : {model}")
