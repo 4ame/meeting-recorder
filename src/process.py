@@ -219,18 +219,19 @@ def generate_report_from_text(transcription: str) -> str:
 
     debug = os.getenv("GEMINI_DEBUG", "0") == "1"
 
-    # Clé perso (tier gratuit) — modèles disponibles sans spending cap
-    # Clé entreprise (tier payant) — modèles premium, fallback si perso insuffisant
+    # Priorité aux modèles pro (perso puis entreprise), puis fallback flash
     attempts = []
     if API_KEY:
+        attempts.append((API_KEY, "gemini-2.5-pro"))
+    if API_KEY_COMPANY:
+        attempts.append((API_KEY_COMPANY, "gemini-3.1-pro-preview"))
+    if API_KEY:
         attempts += [
-            (API_KEY, "gemini-2.5-pro"),
             (API_KEY, "gemini-3-flash-preview"),
             (API_KEY, "gemini-2.5-flash"),
         ]
     if API_KEY_COMPANY:
         attempts += [
-            (API_KEY_COMPANY, "gemini-3.1-pro-preview"),
             (API_KEY_COMPANY, "gemini-3-flash-preview"),
             (API_KEY_COMPANY, "gemini-2.5-flash"),
         ]
