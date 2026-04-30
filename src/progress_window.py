@@ -163,6 +163,11 @@ class ProgressWindow:
         log_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "tray.log"))
         os.startfile(log_path)
 
+    @property
+    def is_alive(self) -> bool:
+        """True si la fenêtre existe encore (non fermée manuellement ni par done/error)."""
+        return self._root is not None
+
     def lift(self) -> None:
         """Ramène la fenêtre au premier plan si elle existe encore."""
         if self._root:
