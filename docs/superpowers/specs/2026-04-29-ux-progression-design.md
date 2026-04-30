@@ -172,12 +172,21 @@ Tous les appels tkinter depuis `on_progress` passent par `window.after(0, lambda
 
 ### Intégration dans `tray.py`
 
+La fenêtre expose une méthode `on_event(event: ProgressEvent)` (et non `update` qui est une méthode tkinter native). `tray.py` construit un callback composite qui dispatche vers les deux destinataires :
+
 ```python
 # Dans process_async()
 win = ProgressWindow(on_cancel=process.cancel)
 threading.Thread(target=win.mainloop, daemon=True).start()
-transcription = process.transcribe(audio_path, on_progress=win.update)
+
+def on_progress(event):
+    win.on_event(event)           # met à jour la fenêtre flottante
+    _update_tray_tooltip(event)   # met à jour le tooltip de l'icône tray
+
+transcription = process.transcribe(audio_path, on_progress=on_progress)
 ```
+
+**"Ouvrir progression" depuis le menu tray :** si la fenêtre a été fermée manuellement par l'utilisateur, cette action en recrée une nouvelle instance et la passe en premier plan (`lift()` + `focus_force()`). La référence `win` dans `process_async` est mise à jour en conséquence.
 
 ## Fichiers non touchés
 
