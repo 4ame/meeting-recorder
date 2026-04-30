@@ -27,6 +27,14 @@ _ffmpeg_bin = r"C:\Users\arnau\scoop\apps\ffmpeg\current\bin"
 if os.path.exists(_ffmpeg_bin):
     os.environ["PATH"] = _ffmpeg_bin + os.pathsep + os.environ.get("PATH", "")
 
+def _emit(step: str, pct: float, message: str) -> None:
+    """Émet un événement de progression sur stderr en JSON. Ne lève jamais d'exception."""
+    try:
+        line = json.dumps({"type": "progress", "step": step, "pct": pct, "message": message}, ensure_ascii=False)
+        print(line, file=sys.stderr, flush=True)
+    except Exception:
+        pass
+
 def main():
     # Redirige stdout vers stderr pour que les logs n'interfèrent pas avec le JSON
     _real_stdout = sys.stdout
@@ -47,23 +55,29 @@ def main():
     compute_type = "float16" if device == "cuda" else "int8"
 
     # Étape 1 — Transcription
+    _emit("transcription", 0.0, "Chargement modèle large-v3-turbo...")
     model = whisperx.load_model("large-v3-turbo", device=device, compute_type=compute_type, language="fr")
+    _emit("transcription", 0.3, "Transcription en cours...")
     audio = whisperx.load_audio(audio_path)
     result = model.transcribe(audio, batch_size=16, language="fr")
+    _emit("transcription", 0.7, "Transcription terminée")
 
     # Libère la VRAM avant l'alignement
     del model
     torch.cuda.empty_cache()
 
     # Étape 2 — Alignement temporel mot à mot
+    _emit("alignment", 0.0, "Chargement modèle d'alignement...")
     model_a, metadata = whisperx.load_align_model(language_code="fr", device=device)
     result = whisperx.align(result["segments"], model_a, metadata, audio, device, return_char_alignments=False)
+    _emit("alignment", 1.0, "Alignement terminé")
 
     del model_a
     torch.cuda.empty_cache()
 
     # Étape 3 — Diarisation (optionnelle si token HuggingFace disponible)
     if hf_token:
+        _emit("diarization", 0.0, "Diarisation en cours...")
         diarize_model = whisperx.diarize.DiarizationPipeline(
             model_name="pyannote/speaker-diarization-3.1",
             token=hf_token,
@@ -71,6 +85,7 @@ def main():
         )
         diarize_segments = diarize_model(audio)
         result = whisperx.assign_word_speakers(diarize_segments, result)
+        _emit("diarization", 1.0, "Diarisation terminée")
 
     # Construction de la transcription complète avec speakers
     segments = result.get("segments", [])
