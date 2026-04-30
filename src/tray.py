@@ -13,8 +13,9 @@ import datetime
 
 # Log des erreurs dans un fichier (pythonw n'affiche pas les erreurs)
 _log_path = os.path.join(os.path.dirname(__file__), "..", "tray.log")
-sys.stderr = open(_log_path, "w", encoding="utf-8", buffering=1)
+sys.stderr = open(_log_path, "a", encoding="utf-8", buffering=1)
 sys.stdout = sys.stderr
+sys.stderr.write(f"\n{'='*60}\n[session] {datetime.datetime.now().isoformat()}\n{'='*60}\n")
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -23,11 +24,17 @@ from PIL import Image, ImageDraw
 import subprocess
 import record
 import process
+import progress_window as pw
+import time
 
 # --- État global ---
 _recording = False
 _record_thread = None
 _icon = None
+_processing = False
+_progress_win = None
+_processing_start: float = 0.0
+_meeting_duration_s: float = 0.0
 
 _COLORS = {
     "idle":         (120, 120, 120),  # gris
@@ -48,6 +55,22 @@ def _set_state(icon, state: str, title: str):
     icon.icon = _make_icon(state)
     icon.title = title
     print(f"[état] {state} — {title}")
+
+
+def _update_tray_tooltip(event) -> None:
+    if _icon is None:
+        return
+    _LABELS = {
+        "transcription": "Transcription",
+        "alignment": "Alignement",
+        "diarization": "Diarisation",
+        "gemini": "Génération CR",
+    }
+    label = _LABELS.get(event.step, event.step)
+    detail = f"{label} {int(event.pct * 100)}%" if event.pct >= 0 else label
+    if event.message:
+        detail += f" · {event.message[:50]}"
+    _icon.title = f"Meeting Recorder — {detail}"
 
 
 def _notify(title: str, message: str):
@@ -96,31 +119,79 @@ def _stop(icon, item):
         _record_thread.join()
 
     def process_async():
-        try:
-            if not record.recording_chunks:
-                print("[process] Aucun audio capturé")
-                _set_state(icon, "idle", "Meeting Recorder")
-                return
+        global _processing, _progress_win, _processing_start, _meeting_duration_s
 
+        if not record.recording_chunks:
+            print("[process] Aucun audio capturé")
+            _set_state(icon, "idle", "Meeting Recorder")
+            return
+
+        _processing = True
+        _processing_start = time.monotonic()
+        process._reset_cancel()
+
+        frames = sum(len(c) for c in record.recording_chunks)
+        _meeting_duration_s = frames / record.SAMPLE_RATE
+
+        win = pw.ProgressWindow(on_cancel=process.cancel)
+        _progress_win = win
+        threading.Thread(target=win.mainloop, daemon=True).start()
+
+        def on_progress(event):
+            if _progress_win is not None:
+                _progress_win.on_event(event)
+            _update_tray_tooltip(event)
+
+        transcription_saved = False
+        try:
             audio_path = record.save_recording()
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M")
 
             _set_state(icon, "transcribing", "Meeting Recorder — Transcription en cours...")
-            transcription = process.transcribe(audio_path)
+            transcription = process.transcribe(audio_path, on_progress=on_progress)
             process.save_transcription(transcription, timestamp)
+            transcription_saved = True
 
             _set_state(icon, "generating", "Meeting Recorder — Génération du CR...")
-            report = process.generate_report_from_text(transcription)
+            report = process.generate_report_from_text(transcription, on_progress=on_progress)
             md_path = process.save_report(report, timestamp)
 
+            on_progress(process.ProgressEvent(step="done", pct=1.0, message=""))
+
+            elapsed = int(time.monotonic() - _processing_start)
+            duration_min = _meeting_duration_s / 60
+            model_label = process._last_model_used or "Gemini"
             _set_state(icon, "idle", "Meeting Recorder")
-            _notify("Compte rendu prêt ✓", f"Fichier : {os.path.basename(md_path)}")
+            _notify(
+                "Compte rendu prêt ✓",
+                f"Réunion : {duration_min:.0f} min · Traitement : {elapsed} s · {model_label}"
+            )
             os.startfile(process.OUTPUT_DIR)
+
+        except process.ProcessCancelled:
+            if _progress_win is not None:
+                _progress_win.on_event(process.ProgressEvent(step="done", pct=1.0, message=""))
+            _set_state(icon, "idle", "Meeting Recorder")
+            if transcription_saved:
+                _notify("Traitement annulé", "transcription.txt conservée")
+            else:
+                _notify("Traitement annulé", "Aucun fichier sauvegardé")
 
         except Exception:
             traceback.print_exc()
+            import io
+            buf = io.StringIO()
+            traceback.print_exc(file=buf)
+            last_line = buf.getvalue().strip().split("\n")[-1]
+            if _progress_win is not None:
+                _progress_win.on_event(process.ProgressEvent(step="error", pct=-1.0, message=last_line))
             _set_state(icon, "idle", "Meeting Recorder — Erreur (voir tray.log)")
-            _notify("Erreur Meeting Recorder", "Consulter tray.log pour les détails")
+            _notify("Erreur Meeting Recorder", last_line[:120])
+
+        finally:
+            _processing = False
+            _progress_win = None
+            process._current_proc = None
 
     threading.Thread(target=process_async, daemon=True).start()
 
