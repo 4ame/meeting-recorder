@@ -133,6 +133,7 @@ def _stop(icon, item):
         _processing = True
         _processing_start = time.monotonic()
         process._reset_cancel()
+        cr_enabled = _cr_enabled  # snapshot de l'intention au moment du stop
 
         frames = sum(len(c) for c in record.recording_chunks)
         _meeting_duration_s = frames / record.SAMPLE_RATE
@@ -155,21 +156,30 @@ def _stop(icon, item):
             process.save_transcription(transcription, timestamp)
             transcription_saved = True
 
-            _set_state(icon, "generating", "Meeting Recorder — Génération du CR...")
-            report = process.generate_report_from_text(transcription, on_progress=on_progress)
-            md_path = process.save_report(report, timestamp)
+            if cr_enabled:
+                _set_state(icon, "generating", "Meeting Recorder — Génération du CR...")
+                report = process.generate_report_from_text(transcription, on_progress=on_progress)
+                process.save_report(report, timestamp)
 
             on_progress(process.ProgressEvent(step="done", pct=1.0, message=""))
 
             elapsed = int(time.monotonic() - _processing_start)
             duration_min = _meeting_duration_s / 60
-            model_label = process._last_model_used or "Gemini"
             _set_state(icon, "idle", "Meeting Recorder")
-            _notify(
-                "Compte rendu prêt ✓",
-                f"Réunion : {duration_min:.0f} min · Traitement : {elapsed} s · {model_label}"
-            )
-            os.startfile(process.OUTPUT_DIR)
+
+            if cr_enabled:
+                model_label = process._last_model_used or "Gemini"
+                _notify(
+                    "Compte rendu prêt ✓",
+                    f"Réunion : {duration_min:.0f} min · Traitement : {elapsed} s · {model_label}"
+                )
+                os.startfile(process.OUTPUT_DIR)
+            else:
+                _notify(
+                    "Transcription prête ✓",
+                    f"Réunion : {duration_min:.0f} min · Traitement : {elapsed} s"
+                )
+                os.startfile(process.meeting_folder(timestamp))
 
         except process.ProcessCancelled:
             win.on_event(process.ProgressEvent(step="done", pct=1.0, message=""))
