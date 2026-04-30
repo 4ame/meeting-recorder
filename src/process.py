@@ -20,7 +20,7 @@ from dataclasses import dataclass
 load_dotenv()
 
 
-@dataclass
+@dataclass(frozen=True)
 class ProgressEvent:
     step: str     # "transcription"|"alignment"|"diarization"|"gemini"|"done"|"error"
     pct: float    # 0.0–1.0 ; -1.0 = indéterminé (progressbar en mode bounce)

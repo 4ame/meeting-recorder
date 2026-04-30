@@ -11,7 +11,7 @@ def test_progress_event_fields():
 
 def test_progress_event_indeterminate_sentinel():
     e = process.ProgressEvent(step="gemini", pct=-1.0, message="")
-    assert e.pct < 0
+    assert e.pct == -1.0
 
 
 def test_process_cancelled_is_exception():
