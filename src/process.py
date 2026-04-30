@@ -136,11 +136,11 @@ def load_audio_numpy(audio_path: str) -> np.ndarray:
     return data
 
 
-def transcribe(audio_path: str) -> str:
+def transcribe(audio_path: str, on_progress=None) -> str:
     """Transcrit un fichier audio localement avec Whisper ou WhisperX selon USE_WHISPERX."""
     if USE_WHISPERX:
-        return transcribe_whisperx(audio_path)
-    return transcribe_whisper(audio_path)
+        return transcribe_whisperx(audio_path, on_progress=on_progress)
+    return transcribe_whisper(audio_path, on_progress=on_progress)
 
 
 def transcribe_whisperx(audio_path: str, on_progress=None) -> str:
@@ -209,7 +209,7 @@ def transcribe_whisperx(audio_path: str, on_progress=None) -> str:
     return transcription
 
 
-def transcribe_whisper(audio_path: str) -> str:
+def transcribe_whisper(audio_path: str, on_progress=None) -> str:
     """Transcrit un fichier audio localement avec Whisper vanilla."""
     print(f"\n🎙️  Transcription Whisper (modèle : {WHISPER_MODEL})")
     print(f"   Fichier : {os.path.basename(audio_path)}")
@@ -218,11 +218,14 @@ def transcribe_whisper(audio_path: str) -> str:
     import torch
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"   Device : {device.upper()}")
+    _emit(on_progress, "transcription", 0.0, f"Chargement modèle {WHISPER_MODEL}...")
 
     try:
         model = get_whisper_model()
+        _emit(on_progress, "transcription", 0.3, "Transcription en cours...")
         audio = load_audio_numpy(audio_path)
         result = model.transcribe(audio, language="fr", verbose=False, fp16=(device == "cuda"))
+        _emit(on_progress, "transcription", 1.0, "Transcription terminée")
     except Exception as cuda_err:
         if "CUDA" in str(cuda_err) or "cuda" in str(cuda_err):
             print(f"   ⚠️  Erreur CUDA ({cuda_err.__class__.__name__}), bascule sur CPU...")
@@ -280,11 +283,12 @@ def generate_report_from_audio(audio_path: str) -> str:
     return response.text
 
 
-def generate_report_from_text(transcription: str) -> str:
+def generate_report_from_text(transcription: str, on_progress=None) -> str:
     """
     Envoie la transcription texte à Gemini (Options B/C/D).
     Méthode recommandée — plus rapide et sans limite de taille.
     """
+    global _last_model_used
     print(f"\n📤 Génération du compte rendu via Gemini...")
 
     if not API_KEY:
@@ -314,8 +318,11 @@ def generate_report_from_text(transcription: str) -> str:
         ]
 
     for api_key, model in attempts:
+        if _cancel_requested:
+            raise ProcessCancelled("Traitement annulé par l'utilisateur")
         key_label = "perso" if api_key == API_KEY else "entreprise"
         try:
+            _emit(on_progress, "gemini", -1.0, f"{model} [{key_label}]...")
             print(f"   Modèle : {model} [{key_label}]")
             if debug:
                 print(f"   [DEBUG] Prompt : {len(full_prompt)} caractères")
@@ -328,6 +335,7 @@ def generate_report_from_text(transcription: str) -> str:
             if debug:
                 print(f"   [DEBUG] Réponse reçue : {len(response.text)} caractères")
                 print(f"   [DEBUG] Usage tokens : {getattr(response, 'usage_metadata', 'N/A')}")
+            _last_model_used = f"{model} [{key_label}]"
             print("✅ Compte rendu généré")
             return response.text
         except Exception as e:
