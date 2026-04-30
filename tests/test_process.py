@@ -17,3 +17,29 @@ def test_progress_event_indeterminate_sentinel():
 def test_process_cancelled_is_exception():
     with pytest.raises(process.ProcessCancelled):
         raise process.ProcessCancelled("annulé")
+
+
+def test_cancel_sets_flag():
+    process._reset_cancel()
+    assert not process._cancel_requested
+    process.cancel()
+    assert process._cancel_requested
+    process._reset_cancel()
+
+
+def test_reset_cancel_clears_flag():
+    process._cancel_requested = True
+    process._reset_cancel()
+    assert not process._cancel_requested
+
+
+def test_emit_calls_callback():
+    events = []
+    process._emit(events.append, "transcription", 0.5, "test msg")
+    assert len(events) == 1
+    assert events[0].step == "transcription"
+    assert events[0].pct == 0.5
+
+
+def test_emit_noop_without_callback():
+    process._emit(None, "transcription", 0.0, "msg")  # doit ne pas lever d'exception

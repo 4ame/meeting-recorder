@@ -30,6 +30,34 @@ class ProgressEvent:
 class ProcessCancelled(Exception):
     pass
 
+_cancel_requested: bool = False
+_current_proc = None  # subprocess.Popen actif, None sinon
+_last_model_used: str = ""  # rempli par generate_report_from_text
+
+
+def cancel() -> None:
+    """Interrompt le traitement en cours : termine le subprocess WhisperX et lève le flag."""
+    global _cancel_requested, _current_proc
+    _cancel_requested = True
+    if _current_proc is not None:
+        try:
+            _current_proc.terminate()
+        except OSError:
+            pass
+        _current_proc = None
+
+
+def _reset_cancel() -> None:
+    """Remet le flag à zéro avant chaque nouveau traitement."""
+    global _cancel_requested
+    _cancel_requested = False
+
+
+def _emit(on_progress, step: str, pct: float, message: str) -> None:
+    """Appelle le callback on_progress si présent."""
+    if on_progress is not None:
+        on_progress(ProgressEvent(step=step, pct=pct, message=message))
+
 # --- Configuration ---
 API_KEY = os.getenv("GEMINI_API_KEY")
 API_KEY_COMPANY = os.getenv("GEMINI_API_KEY_COMPANY")
