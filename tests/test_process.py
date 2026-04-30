@@ -2,6 +2,15 @@ import pytest
 import process
 
 
+@pytest.fixture(autouse=True)
+def reset_module_state():
+    process._reset_cancel()
+    process._current_proc = None
+    yield
+    process._reset_cancel()
+    process._current_proc = None
+
+
 def test_progress_event_fields():
     e = process.ProgressEvent(step="transcription", pct=0.5, message="test")
     assert e.step == "transcription"
