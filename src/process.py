@@ -233,7 +233,9 @@ def transcribe_whisper(audio_path: str, on_progress=None) -> str:
             _whisper_model = None  # Réinitialise le cache
             _whisper_model = whisper.load_model(WHISPER_MODEL, device="cpu")
             audio = load_audio_numpy(audio_path)
+            _emit(on_progress, "transcription", 0.5, "Bascule CPU, transcription en cours...")
             result = _whisper_model.transcribe(audio, language="fr", verbose=False, fp16=False)
+            _emit(on_progress, "transcription", 1.0, "Transcription terminée (CPU)")
         else:
             raise
 
