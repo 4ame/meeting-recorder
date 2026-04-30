@@ -15,8 +15,20 @@ import os
 import sys
 from pathlib import Path
 from dotenv import load_dotenv
+from dataclasses import dataclass
 
 load_dotenv()
+
+
+@dataclass
+class ProgressEvent:
+    step: str     # "transcription"|"alignment"|"diarization"|"gemini"|"done"|"error"
+    pct: float    # 0.0–1.0 ; -1.0 = indéterminé (progressbar en mode bounce)
+    message: str  # description courte affichée dans l'UI
+
+
+class ProcessCancelled(Exception):
+    pass
 
 # --- Configuration ---
 API_KEY = os.getenv("GEMINI_API_KEY")
