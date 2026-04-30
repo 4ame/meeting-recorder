@@ -11,10 +11,13 @@ import numpy as np
 from google import genai
 import datetime
 import argparse
+import json
 import os
+import subprocess
 import sys
 import threading
 from pathlib import Path
+from subprocess import PIPE
 from dotenv import load_dotenv
 from dataclasses import dataclass
 
@@ -142,9 +145,6 @@ def transcribe(audio_path: str) -> str:
 
 def transcribe_whisperx(audio_path: str, on_progress=None) -> str:
     """Transcrit via WhisperX (venv Python 3.12) avec alignement et diarisation."""
-    import subprocess
-    import json as _json
-    from subprocess import PIPE
     global _current_proc
 
     print(f"\n🎙️  Transcription WhisperX (large-v3-turbo + diarisation)")
@@ -154,12 +154,12 @@ def transcribe_whisperx(audio_path: str, on_progress=None) -> str:
     _emit(on_progress, "transcription", 0.0, "Lancement WhisperX...")
 
     cmd = [WHISPERX_PYTHON, "-X", "utf8", WHISPERX_WORKER, audio_path]
-    if HF_TOKEN:
-        cmd.append(HF_TOKEN)
 
     env = os.environ.copy()
     ffmpeg_bin = r"C:\Users\arnau\scoop\apps\ffmpeg\current\bin"
     env["PATH"] = ffmpeg_bin + os.pathsep + env.get("PATH", "")
+    if HF_TOKEN:
+        env["HF_TOKEN"] = HF_TOKEN  # transmis via env, pas en arg CLI (sécurité)
 
     proc = subprocess.Popen(cmd, stdout=PIPE, stderr=PIPE, env=env)
     _current_proc = proc
@@ -171,28 +171,36 @@ def transcribe_whisperx(audio_path: str, on_progress=None) -> str:
             stderr_lines.append(line)
             if on_progress:
                 try:
-                    data = _json.loads(line)
+                    data = json.loads(line)
                     if data.get("type") == "progress":
                         on_progress(ProgressEvent(
                             step=data["step"],
                             pct=data["pct"],
                             message=data.get("message", ""),
                         ))
-                except (_json.JSONDecodeError, KeyError):
+                except (json.JSONDecodeError, KeyError):
                     pass
 
     t = threading.Thread(target=_read_stderr, daemon=True)
     t.start()
 
-    stdout_data = proc.stdout.read()
-    proc.wait()
-    t.join(timeout=2.0)
-    _current_proc = None
+    try:
+        stdout_data = proc.stdout.read()
+        proc.wait()
+        t.join(timeout=5.0)
+    finally:
+        _current_proc = None
 
     if proc.returncode != 0:
         raise RuntimeError("WhisperX worker error:\n" + "\n".join(stderr_lines))
 
-    data = _json.loads(stdout_data.decode("utf-8", errors="replace"))
+    try:
+        data = json.loads(stdout_data.decode("utf-8", errors="replace"))
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            f"WhisperX: réponse stdout invalide ({exc})\nStderr:\n" + "\n".join(stderr_lines)
+        ) from exc
+
     if "error" in data:
         raise RuntimeError(f"WhisperX: {data['error']}")
 
