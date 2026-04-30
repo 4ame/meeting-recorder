@@ -231,7 +231,9 @@ def _show_progress_window(icon, item):
 def _toggle_cr(icon, item):
     global _cr_enabled
     _cr_enabled = not _cr_enabled
-    config.save_settings({"cr_enabled": _cr_enabled})
+    settings = config.load_settings()
+    settings["cr_enabled"] = _cr_enabled
+    config.save_settings(settings)
     print(f"[config] Génération CR : {'activée' if _cr_enabled else 'désactivée'}")
 
 
