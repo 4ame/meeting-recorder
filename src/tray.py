@@ -7,6 +7,7 @@ Contrôle  : clic droit sur l'icône → Démarrer / Arrêter / Quitter
 
 import sys
 import os
+import io
 import threading
 import traceback
 import datetime
@@ -43,6 +44,13 @@ _COLORS = {
     "generating":   ( 30, 120, 210),  # bleu
 }
 
+_TOOLTIP_LABELS = {
+    "transcription": "Transcription",
+    "alignment": "Alignement",
+    "diarization": "Diarisation",
+    "gemini": "Génération CR",
+}
+
 
 def _make_icon(state: str) -> Image.Image:
     img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
@@ -60,13 +68,7 @@ def _set_state(icon, state: str, title: str):
 def _update_tray_tooltip(event) -> None:
     if _icon is None:
         return
-    _LABELS = {
-        "transcription": "Transcription",
-        "alignment": "Alignement",
-        "diarization": "Diarisation",
-        "gemini": "Génération CR",
-    }
-    label = _LABELS.get(event.step, event.step)
+    label = _TOOLTIP_LABELS.get(event.step, event.step)
     detail = f"{label} {int(event.pct * 100)}%" if event.pct >= 0 else label
     if event.message:
         detail += f" · {event.message[:50]}"
@@ -138,8 +140,7 @@ def _stop(icon, item):
         threading.Thread(target=win.mainloop, daemon=True).start()
 
         def on_progress(event):
-            if _progress_win is not None:
-                _progress_win.on_event(event)
+            win.on_event(event)
             _update_tray_tooltip(event)
 
         transcription_saved = False
@@ -178,13 +179,12 @@ def _stop(icon, item):
                 _notify("Traitement annulé", "Aucun fichier sauvegardé")
 
         except Exception:
-            traceback.print_exc()
-            import io
             buf = io.StringIO()
             traceback.print_exc(file=buf)
-            last_line = buf.getvalue().strip().split("\n")[-1]
-            if _progress_win is not None:
-                _progress_win.on_event(process.ProgressEvent(step="error", pct=-1.0, message=last_line))
+            tb_text = buf.getvalue()
+            sys.stderr.write(tb_text)
+            last_line = tb_text.strip().split("\n")[-1]
+            win.on_event(process.ProgressEvent(step="error", pct=-1.0, message=last_line))
             _set_state(icon, "idle", "Meeting Recorder — Erreur (voir tray.log)")
             _notify("Erreur Meeting Recorder", last_line[:120])
 
