@@ -38,12 +38,14 @@ meeting-recorder/
 │   ├── tray.py                 ← point d'entrée — icône tray + orchestration
 │   ├── record.py               ← capture audio micro + système
 │   ├── process.py              ← transcription Whisper/WhisperX + CR Gemini + ProgressEvent
+│   ├── config.py               ← persistance des préférences utilisateur (~/.meeting_recorder/settings.json)
 │   ├── whisperx_worker.py      ← worker WhisperX (exécuté dans venv-whisperx)
 │   ├── progress_window.py      ← fenêtre tkinter flottante de progression (thread-safe)
 │   └── watcher.py              ← surveillance dossier (non utilisé en prod)
 ├── tests/
 │   ├── conftest.py             ← ajoute src/ au sys.path pour pytest
-│   └── test_process.py         ← tests unitaires : ProgressEvent, cancel(), _emit()
+│   ├── test_process.py         ← tests unitaires : ProgressEvent, cancel(), _emit()
+│   └── test_config.py          ← tests unitaires : load_settings(), save_settings()
 ├── prompts/
 │   └── compte-rendu.md         ← prompt système injecté dans Gemini (éditable)
 ├── docs/
