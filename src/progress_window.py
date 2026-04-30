@@ -15,6 +15,15 @@ import threading
 import time
 import os
 
+_STEP_LABELS = {
+    "transcription": "Transcription",
+    "alignment": "Alignement temporel",
+    "diarization": "Diarisation",
+    "gemini": "Génération du compte rendu",
+    "done": "Terminé",
+    "error": "Erreur",
+}
+
 
 class ProgressWindow:
     def __init__(self, on_cancel):
@@ -28,6 +37,7 @@ class ProgressWindow:
         self._progress_bar = None
         self._cancel_btn = None
         self._finished = False
+        self._bar_mode = "indeterminate"
 
     def mainloop(self) -> None:
         """Crée la fenêtre et lance la boucle tkinter. Doit tourner dans son propre thread."""
@@ -101,22 +111,15 @@ class ProgressWindow:
 
     def on_event(self, event) -> None:
         """Thread-safe : peut être appelé depuis n'importe quel thread."""
-        if self._root is None:
+        root = self._root
+        if root is None:
             return
-        self._root.after(0, lambda e=event: self._handle_event(e))
+        root.after(0, lambda e=event: self._handle_event(e))
 
     def _handle_event(self, event) -> None:
         if self._root is None:
             return
-        _LABELS = {
-            "transcription": "Transcription",
-            "alignment": "Alignement temporel",
-            "diarization": "Diarisation",
-            "gemini": "Génération du compte rendu",
-            "done": "Terminé",
-            "error": "Erreur",
-        }
-        self._step_label.config(text=_LABELS.get(event.step, event.step))
+        self._step_label.config(text=_STEP_LABELS.get(event.step, event.step))
         self._msg_label.config(text=event.message, foreground="#444444")
 
         if event.step == "done":
@@ -127,11 +130,13 @@ class ProgressWindow:
             return
 
         if event.pct < 0:
-            if self._progress_bar["mode"] != "indeterminate":
+            if self._bar_mode != "indeterminate":
+                self._bar_mode = "indeterminate"
                 self._progress_bar.config(mode="indeterminate")
                 self._progress_bar.start(10)
             self._pct_label.config(text="")
         else:
+            self._bar_mode = "determinate"
             self._progress_bar.stop()
             self._progress_bar.config(mode="determinate", value=int(event.pct * 100))
             self._pct_label.config(text=f"{int(event.pct * 100)}%")
@@ -170,5 +175,6 @@ class ProgressWindow:
 
     def lift(self) -> None:
         """Ramène la fenêtre au premier plan si elle existe encore."""
-        if self._root:
-            self._root.after(0, lambda: (self._root.lift(), self._root.focus_force()) if self._root else None)
+        root = self._root
+        if root:
+            root.after(0, lambda: (root.lift(), root.focus_force()))
