@@ -31,7 +31,7 @@ import time
 _recording = False
 _record_thread = None
 _icon = None
-_processing = False
+_processing: bool = False
 _progress_win = None
 _processing_start: float = 0.0
 _meeting_duration_s: float = 0.0
