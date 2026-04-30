@@ -13,6 +13,7 @@ import datetime
 import argparse
 import os
 import sys
+import threading
 from pathlib import Path
 from dotenv import load_dotenv
 from dataclasses import dataclass
@@ -139,31 +140,59 @@ def transcribe(audio_path: str) -> str:
     return transcribe_whisper(audio_path)
 
 
-def transcribe_whisperx(audio_path: str) -> str:
+def transcribe_whisperx(audio_path: str, on_progress=None) -> str:
     """Transcrit via WhisperX (venv Python 3.12) avec alignement et diarisation."""
-    import subprocess, json
+    import subprocess
+    import json as _json
+    from subprocess import PIPE
+    global _current_proc
 
     print(f"\n🎙️  Transcription WhisperX (large-v3-turbo + diarisation)")
     print(f"   Fichier : {os.path.basename(audio_path)}")
     print("   ⏳ En cours...")
 
+    _emit(on_progress, "transcription", 0.0, "Lancement WhisperX...")
+
     cmd = [WHISPERX_PYTHON, "-X", "utf8", WHISPERX_WORKER, audio_path]
     if HF_TOKEN:
         cmd.append(HF_TOKEN)
 
-    # Ajoute ffmpeg (installé via Scoop) au PATH du sous-processus
     env = os.environ.copy()
     ffmpeg_bin = r"C:\Users\arnau\scoop\apps\ffmpeg\current\bin"
     env["PATH"] = ffmpeg_bin + os.pathsep + env.get("PATH", "")
 
-    proc = subprocess.run(cmd, capture_output=True, env=env)
-    stdout = proc.stdout.decode("utf-8", errors="replace")
-    stderr = proc.stderr.decode("utf-8", errors="replace")
+    proc = subprocess.Popen(cmd, stdout=PIPE, stderr=PIPE, env=env)
+    _current_proc = proc
+    stderr_lines: list[str] = []
+
+    def _read_stderr() -> None:
+        for raw in proc.stderr:
+            line = raw.decode("utf-8", errors="replace").rstrip()
+            stderr_lines.append(line)
+            if on_progress:
+                try:
+                    data = _json.loads(line)
+                    if data.get("type") == "progress":
+                        on_progress(ProgressEvent(
+                            step=data["step"],
+                            pct=data["pct"],
+                            message=data.get("message", ""),
+                        ))
+                except (_json.JSONDecodeError, KeyError):
+                    pass
+
+    t = threading.Thread(target=_read_stderr, daemon=True)
+    t.start()
+
+    stdout_data = proc.stdout.read()
+    proc.wait()
+    t.join(timeout=2.0)
+    _current_proc = None
 
     if proc.returncode != 0:
-        raise RuntimeError(f"WhisperX worker error:\n{stderr}")
+        raise RuntimeError("WhisperX worker error:\n" + "\n".join(stderr_lines))
 
-    data = json.loads(stdout)
+    data = _json.loads(stdout_data.decode("utf-8", errors="replace"))
     if "error" in data:
         raise RuntimeError(f"WhisperX: {data['error']}")
 
