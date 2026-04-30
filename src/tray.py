@@ -202,15 +202,43 @@ def _quit(icon, item):
     icon.stop()
 
 
+def _cancel_processing(icon, item):
+    process.cancel()
+
+
+def _show_progress_window(icon, item):
+    global _progress_win
+    if _progress_win is not None and _progress_win.is_alive:
+        _progress_win.lift()
+    elif _processing:
+        win = pw.ProgressWindow(on_cancel=process.cancel)
+        _progress_win = win
+        threading.Thread(target=win.mainloop, daemon=True).start()
+
+
 def _build_menu():
     return pystray.Menu(
         pystray.MenuItem(
             lambda _: "Arrêter et générer le CR" if _recording else "Démarrer l'enregistrement",
             lambda icon, item: _stop(icon, item) if _recording else _start(icon, item),
             default=True,
+            enabled=lambda _: not _processing,
+        ),
+        pystray.MenuItem(
+            "Annuler le traitement",
+            _cancel_processing,
+            visible=lambda _: _processing,
+        ),
+        pystray.MenuItem(
+            "Ouvrir la progression",
+            _show_progress_window,
+            visible=lambda _: _processing,
         ),
         pystray.Menu.SEPARATOR,
-        pystray.MenuItem("Ouvrir le dossier des CR", lambda icon, item: os.startfile(process.OUTPUT_DIR)),
+        pystray.MenuItem(
+            "Ouvrir le dossier des CR",
+            lambda icon, item: os.startfile(process.OUTPUT_DIR),
+        ),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Quitter", _quit),
     )
