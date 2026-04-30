@@ -27,6 +27,7 @@ import record
 import process
 import progress_window as pw
 import time
+import config
 
 # --- État global ---
 _recording = False
@@ -36,6 +37,7 @@ _processing: bool = False
 _progress_win = None
 _processing_start: float = 0.0
 _meeting_duration_s: float = 0.0
+_cr_enabled: bool = False
 
 _COLORS = {
     "idle":         (120, 120, 120),  # gris
@@ -216,10 +218,20 @@ def _show_progress_window(icon, item):
         threading.Thread(target=new_win.mainloop, daemon=True).start()
 
 
+def _toggle_cr(icon, item):
+    global _cr_enabled
+    _cr_enabled = not _cr_enabled
+    config.save_settings({"cr_enabled": _cr_enabled})
+    print(f"[config] Génération CR : {'activée' if _cr_enabled else 'désactivée'}")
+
+
 def _build_menu():
     return pystray.Menu(
         pystray.MenuItem(
-            lambda _: "Arrêter et générer le CR" if _recording else "Démarrer l'enregistrement",
+            lambda _: (
+                ("Arrêter et générer le CR" if _cr_enabled else "Arrêter l'enregistrement")
+                if _recording else "Démarrer l'enregistrement"
+            ),
             lambda icon, item: _stop(icon, item) if _recording else _start(icon, item),
             default=True,
             enabled=lambda _: not _processing,
@@ -236,6 +248,12 @@ def _build_menu():
         ),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem(
+            "Générer le CR",
+            _toggle_cr,
+            checked=lambda _: _cr_enabled,
+        ),
+        pystray.Menu.SEPARATOR,
+        pystray.MenuItem(
             "Ouvrir le dossier des CR",
             lambda icon, item: os.startfile(process.OUTPUT_DIR),
         ),
@@ -247,6 +265,8 @@ def _build_menu():
 if __name__ == "__main__":
     try:
         print("Démarrage Meeting Recorder...")
+        _cr_enabled = config.load_settings().get("cr_enabled", False)
+        print(f"[config] Génération CR au démarrage : {'activée' if _cr_enabled else 'désactivée'}")
         _icon = pystray.Icon(
             name="meeting-recorder",
             icon=_make_icon("idle"),
