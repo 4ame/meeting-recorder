@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import MagicMock
 import process
 
 
@@ -52,3 +53,11 @@ def test_emit_calls_callback():
 
 def test_emit_noop_without_callback():
     process._emit(None, "transcription", 0.0, "msg")  # doit ne pas lever d'exception
+
+
+def test_cancel_terminates_proc():
+    mock_proc = MagicMock()
+    process._current_proc = mock_proc
+    process.cancel()
+    mock_proc.terminate.assert_called_once()
+    assert process._current_proc is None

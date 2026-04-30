@@ -16,7 +16,7 @@ Interface : icône dans la barre des tâches (pystray). Zéro intervention manue
 - **Whisper large-v3-turbo** (OpenAI, local, GPU) — transcription vanilla
 - **WhisperX 3.8.5** (Python 3.12, venv dédié) — transcription avec alignement mot/temps + diarisation
 - **pyannote.audio 4.0.4** — diarisation speaker (nécessite HF_TOKEN)
-- **Gemini** (`gemini-3.1-pro-preview` → fallback `gemini-3-flash-preview`) — génération CR
+- **Gemini** (`gemini-2.5-pro` [clé perso] → `gemini-3.1-pro-preview` [clé entreprise] → `gemini-3-flash-preview` → `gemini-2.5-flash`) — génération CR, chaîne de fallback dans `generate_report_from_text()`
 - **sounddevice** — capture micro (compatible Bluetooth/WASAPI PCM)
 - **soundcard** — capture son système (WASAPI loopback)
 - **pystray + Pillow** — icône barre des tâches
@@ -37,9 +37,13 @@ meeting-recorder/
 ├── src/
 │   ├── tray.py                 ← point d'entrée — icône tray + orchestration
 │   ├── record.py               ← capture audio micro + système
-│   ├── process.py              ← transcription Whisper/WhisperX + CR Gemini
+│   ├── process.py              ← transcription Whisper/WhisperX + CR Gemini + ProgressEvent
 │   ├── whisperx_worker.py      ← worker WhisperX (exécuté dans venv-whisperx)
+│   ├── progress_window.py      ← fenêtre tkinter flottante de progression (thread-safe)
 │   └── watcher.py              ← surveillance dossier (non utilisé en prod)
+├── tests/
+│   ├── conftest.py             ← ajoute src/ au sys.path pour pytest
+│   └── test_process.py         ← tests unitaires : ProgressEvent, cancel(), _emit()
 ├── prompts/
 │   └── compte-rendu.md         ← prompt système injecté dans Gemini (éditable)
 ├── docs/
@@ -96,11 +100,13 @@ pip install -r requirements.txt
 
 | Variable | Obligatoire | Description |
 |----------|------------|-------------|
-| `GEMINI_API_KEY` | ✅ | Clé API Google Gemini |
+| `GEMINI_API_KEY` | ✅ | Clé API Google Gemini (compte perso) |
+| `GEMINI_API_KEY_COMPANY` | Non | Clé API Google Gemini (compte entreprise) — active la chaîne de fallback étendue |
 | `WHISPER_MODEL` | Non | Modèle Whisper (défaut : `large-v3-turbo`) |
 | `USE_WHISPERX` | Non | `1` = WhisperX, `0` = Whisper vanilla (défaut : `0`) |
 | `HF_TOKEN` | Non | Token HuggingFace pour la diarisation pyannote |
 | `OUTPUT_DIR` | Non | Dossier de sortie des CR |
+| `GEMINI_DEBUG` | Non | `1` = log détaillé des requêtes Gemini (tokens, traceback complet) |
 
 ## Règles de sécurité
 

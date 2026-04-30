@@ -170,8 +170,7 @@ def _stop(icon, item):
             os.startfile(process.OUTPUT_DIR)
 
         except process.ProcessCancelled:
-            if _progress_win is not None:
-                _progress_win.on_event(process.ProgressEvent(step="done", pct=1.0, message=""))
+            win.on_event(process.ProgressEvent(step="done", pct=1.0, message=""))
             _set_state(icon, "idle", "Meeting Recorder")
             if transcription_saved:
                 _notify("Traitement annulé", "transcription.txt conservée")
