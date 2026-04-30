@@ -208,12 +208,13 @@ def _cancel_processing(icon, item):
 
 def _show_progress_window(icon, item):
     global _progress_win
-    if _progress_win is not None and _progress_win.is_alive:
-        _progress_win.lift()
+    current = _progress_win  # snapshot atomique — _progress_win peut être mis à None par process_async
+    if current is not None and current.is_alive:
+        current.lift()
     elif _processing:
-        win = pw.ProgressWindow(on_cancel=process.cancel)
-        _progress_win = win
-        threading.Thread(target=win.mainloop, daemon=True).start()
+        new_win = pw.ProgressWindow(on_cancel=process.cancel)
+        _progress_win = new_win
+        threading.Thread(target=new_win.mainloop, daemon=True).start()
 
 
 def _build_menu():
